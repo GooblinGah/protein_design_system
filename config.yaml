@@ -6,35 +6,131 @@ model:
   n_heads: 14
   vocab_size: 23  # 20 AA + BOS/EOS/PAD
   dropout: 0.1
+  d_ff: 3584
+
+# Data configuration
+data:
+  # Paths to processed data
+  train_path: "data/processed/train.parquet"
+  val_path: "data/processed/val.parquet"
+  test_path: "data/processed/test.parquet"
+  
+  # Raw data paths
+  raw_fasta: "data/raw/swissprot_hydrolases.fasta"
+  annotations: "data/raw/annotations.csv"
+  
+  # Processing parameters
+  min_length: 220
+  max_length: 350
+  identity_threshold: 0.30
+  
+  # Exemplar settings
+  exemplars_per_sample: 10
+  use_exemplars: true
+
+# Retrieval configuration
+retrieval:
+  use_retrieval: true
+  index_path: "data/processed/retrieval_index"
+  embedding_model: "facebook/esm2_t33_650M_UR50D"
+  embedding_dim: 1280
+  index_type: "flat"
+  top_k: 10
+  k: 8
+  method: "esm2_faiss"  # ["kmer", "esm2_faiss"]
+
+# Alignment configuration
+alignment:
+  use_alignment: true
+  profile_hmm_path: "data/processed/family_profile.hmm"
+  hmmbuild_path: "/usr/bin/hmmbuild"
+  hmmalign_path: "/usr/bin/hmmalign"
+  muscle_path: "/usr/bin/muscle"
+
+# Evaluation configuration
+evaluation:
+  metrics:
+    - constraint_satisfaction
+    - motif_correctness
+    - liability_score
+    - novelty_check
+    - identity_distribution
+  
+  # Thresholds
+  max_identity_threshold: 0.70
+  min_constraint_satisfaction: 0.90
+  max_liability_score: 0.3
+  
+  # Evaluation frequency
+  eval_every_n_steps: 1000
+
 training:
   batch_tokens: 65536
   epochs: 12
   amp: true
   grad_clip: 1.0
+  
+  # Add these:
+  use_exemplars: true
+  use_alignments: true
+  
+  # Loss weights with exemplars
+  loss_weights:
+    ce_loss: 1.0
+    gate_loss: 0.5
+    copy_loss: 0.3
+    identity_loss: 0.2
+    alignment_loss: 0.1
+  
+  # Curriculum stages with data
+  curriculum:
+    stages:
+      - name: "warmup"
+        epochs: [0, 2]
+        use_exemplars: false
+        losses: ["ce_loss"]
+      
+      - name: "gate_training"
+        epochs: [3, 5]
+        use_exemplars: true
+        losses: ["ce_loss", "gate_loss"]
+      
+      - name: "copy_training"
+        epochs: [6, 8]
+        use_exemplars: true
+        losses: ["ce_loss", "gate_loss", "copy_loss"]
+      
+      - name: "full_training"
+        epochs: [9, 12]
+        use_exemplars: true
+        losses: ["ce_loss", "gate_loss", "copy_loss", "identity_loss"]
+
 optimizer:
   name: adamw
   lr_decoder: 3.0e-4
   lr_pointer: 1.0e-4
   betas: [0.9, 0.95]
   weight_decay: 0.05
+
 scheduler:
   kind: cosine
   warmup_steps: 2000
+
 curriculum:
   stages: [{epoch_end:2},{epoch_end:5},{epoch_end:8},{epoch_end:12}]
   loss_weights:
     gate: 0.5
     copy: 0.5
     identity: 0.2
+
 novelty:
   max_single_identity: 0.70
+
 controller:
   z_soft: 0.7
   z_hard: 1.5
   hysteresis_min_tokens: 3
-retrieval:
-  k: 8
-  method: "esm2_faiss"  # ["kmer", "esm2_faiss"]
+
 paths:
   data_root: "data/"
   index_root: "data/index/"

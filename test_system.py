@@ -319,6 +319,111 @@ def test_end_to_end():
         logger.error(f"❌ End-to-end integration tests failed: {e}")
         return False
 
+def test_identity_computation():
+    """Test identity score computation."""
+    logger.info("Testing identity score computation...")
+    
+    try:
+        from models.decoding.fsa_constrained import FSAConstrainedDecoder
+        from models.controller.segmental_hmm import SegmentalHMMController
+        from constraints.fsa import FSAConstraintEngine
+        
+        # Create mock components
+        class MockModel:
+            def __init__(self):
+                self.device = torch.device('cpu')
+            
+            def parameters(self):
+                return iter([torch.randn(1)])  # Mock parameter iterator
+            
+            def __call__(self, *args, **kwargs):
+                return torch.randn(1, 10, 23), torch.randn(1, 10, 23), torch.randn(1, 10), torch.randn(1, 10, 5)
+        
+        controller = SegmentalHMMController()
+        constraint_engine = FSAConstraintEngine()
+        config = {'max_length': 100, 'beam_size': 4, 'novelty': {'max_single_identity': 0.7}}
+        
+        decoder = FSAConstrainedDecoder(MockModel(), controller, constraint_engine, config)
+        
+        # Test identity computation
+        sequence = [0, 5, 10, 15, 20, 1]  # BOS, AAs, EOS
+        exemplars = torch.tensor([
+            [0, 5, 10, 15, 20, 1],  # Same sequence
+            [0, 6, 11, 16, 21, 1],  # Different sequence
+            [0, 5, 10, 15, 20, 1]   # Same sequence
+        ])
+        
+        identity = decoder._compute_identity_score(sequence, exemplars)
+        assert 0.0 <= identity <= 1.0, f"Identity should be between 0 and 1, got {identity}"
+        
+        # Test with identical sequence
+        identity_identical = decoder._compute_identity_score(sequence, exemplars[:1])
+        assert identity_identical == 1.0, f"Identical sequence should have identity 1.0, got {identity_identical}"
+        
+        logger.info("✅ Identity computation tests passed")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Identity computation tests failed: {e}")
+        return False
+
+def test_motif_snapping():
+    """Test motif snapping functionality."""
+    logger.info("Testing motif snapping...")
+    
+    try:
+        from models.decoding.fsa_constrained import FSAConstrainedDecoder
+        from models.controller.segmental_hmm import SegmentalHMMController
+        from constraints.fsa import FSAConstraintEngine
+        
+        # Create mock components
+        class MockModel:
+            def __init__(self):
+                self.device = torch.device('cpu')
+            
+            def parameters(self):
+                return iter([torch.randn(1)])  # Mock parameter iterator
+            
+            def __call__(self, *args, **kwargs):
+                return torch.randn(1, 10, 23), torch.randn(1, 10, 23), torch.randn(1, 10), torch.randn(1, 10, 5)
+        
+        controller = SegmentalHMMController()
+        constraint_engine = FSAConstraintEngine()
+        config = {'max_length': 100, 'beam_size': 4, 'novelty': {'max_single_identity': 0.7}}
+        
+        decoder = FSAConstrainedDecoder(MockModel(), controller, constraint_engine, config)
+        
+        # Test motif snapping
+        state = {
+            'pos1': 50,
+            'provenance_cache': {'boundary_reset': False}
+        }
+        
+        dsl_constraints = {
+            'windows': [[50, 90]],  # Motif window starting at position 50
+            'dfa_tables': [torch.randn(40, 20).bool()]  # Mock DFA table
+        }
+        
+        updated_state = decoder._apply_motif_snapping(state, dsl_constraints)
+        
+        # Check that motif snapping was applied
+        assert updated_state['motif_active'] == True
+        assert updated_state['motif_idx'] == 0
+        assert updated_state['motif_start'] == 50
+        assert updated_state['motif_end'] == 90
+        assert updated_state['provenance_cache']['boundary_reset'] == True
+        assert 'motif_gate_bias' in updated_state
+        
+        # Test gate bias computation
+        gate_bias = decoder._compute_motif_gate_bias(50, 90, 3)
+        assert gate_bias.shape == (3,)
+        assert torch.all(gate_bias >= 0.5)  # Should be high gate values
+        
+        logger.info("✅ Motif snapping tests passed")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Motif snapping tests failed: {e}")
+        return False
+
 def main():
     """Run all tests."""
     logger.info("Starting comprehensive system tests...")
@@ -332,7 +437,9 @@ def main():
         test_heads,
         test_decoder,
         test_training_components,
-        test_end_to_end
+        test_end_to_end,
+        test_identity_computation,
+        test_motif_snapping
     ]
     
     passed = 0

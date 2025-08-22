@@ -61,6 +61,10 @@ class FSAConstrainedDecoder:
         """
         self.logger.info(f"Starting FSA-constrained decoding with beam size {self.beam_size}")
         
+        # Store constraints and exemplars for access in other methods
+        self.dsl_constraints = dsl_constraints
+        self.exemplars = exemplars
+        
         # Initialize beam state
         beam_states = self._initialize_beam()
         
@@ -173,6 +177,10 @@ class FSAConstrainedDecoder:
         # Update position
         new_state['pos1'] = step + 1
         
+        # Apply motif snapping if entering motif window
+        if hasattr(self, 'dsl_constraints'):
+            new_state = self._apply_motif_snapping(new_state, self.dsl_constraints)
+        
         # Update controller state
         if hasattr(self.controller, 'compute_tier'):
             tier, gate_bias, advance_factor = self.controller.compute_tier(
@@ -191,13 +199,16 @@ class FSAConstrainedDecoder:
         pruned_states = []
         
         for state in beam_states:
-            # Check identity constraints (simplified)
-            # In practice, this would compute actual identity scores
+            # Check identity constraints after some tokens
             if len(state['prefix_ids']) > 10:  # Only check after some tokens
-                # Placeholder identity check
-                identity_estimate = 0.5  # Would be computed from exemplars
+                # Compute actual identity score
+                identity_score = self._compute_identity_score(
+                    state['prefix_ids'], 
+                    self.exemplars
+                )
                 
-                if identity_estimate > self.max_identity:
+                # Enforce hard cap
+                if identity_score > self.max_identity:
                     continue  # Prune this beam
             
             pruned_states.append(state)
@@ -221,6 +232,17 @@ class FSAConstrainedDecoder:
                 # Add EOS token if not finished
                 state['prefix_ids'].append(1)
             
+            # Compute final identity score
+            final_identity = self._compute_identity_score(
+                state['prefix_ids'], 
+                self.exemplars
+            )
+            
+            # Enforce hard cap at finalization
+            if final_identity > self.max_identity:
+                self.logger.warning(f"Beam {i} exceeds identity cap: {final_identity:.3f} > {self.max_identity}")
+                continue  # Skip this sequence
+            
             # Create result
             result = {
                 'sequence': state['prefix_ids'],
@@ -228,7 +250,9 @@ class FSAConstrainedDecoder:
                 'length': len(state['prefix_ids']),
                 'provenance': {
                     'tiers': state['provenance_cache']['tiers'],
-                    'lambda_history': state['provenance_cache']['lambda_history']
+                    'lambda_history': state['provenance_cache']['lambda_history'],
+                    'max_identity': final_identity,
+                    'boundary_reset': state.get('boundary_reset', False)
                 },
                 'beam_rank': i
             }
@@ -240,15 +264,111 @@ class FSAConstrainedDecoder:
     def _compute_identity_score(self, 
                                sequence: List[int],
                                exemplars: torch.Tensor) -> float:
-        """Compute identity score with exemplars."""
-        # This is a simplified version
-        # In practice, would compute actual sequence identity
-        return 0.5  # Placeholder
+        """
+        Compute global % identity of current prefix vs each exemplar.
+        
+        Args:
+            sequence: Current sequence prefix (including BOS/EOS/PAD tokens)
+            exemplars: [K, L] exemplar sequences where K is number of exemplars
+            
+        Returns:
+            Maximum identity score across all exemplars
+        """
+        # Filter out special tokens (BOS=0, EOS=1, PAD=2)
+        valid_tokens = [token for token in sequence if token > 2]
+        
+        if not valid_tokens:
+            return 0.0
+        
+        num_exemplars = exemplars.shape[0]
+        max_identity = 0.0
+        
+        for k in range(num_exemplars):
+            exemplar = exemplars[k]
+            
+            # Get exemplar tokens (filter special tokens)
+            exemplar_tokens = exemplar[exemplar > 2].tolist()
+            
+            if not exemplar_tokens:
+                continue
+            
+            # Compute identity for this exemplar
+            # Use shorter length to avoid index errors
+            min_len = min(len(valid_tokens), len(exemplar_tokens))
+            
+            if min_len == 0:
+                continue
+            
+            # Count matches
+            matches = sum(1 for i in range(min_len) if valid_tokens[i] == exemplar_tokens[i])
+            identity = matches / min_len
+            
+            max_identity = max(max_identity, identity)
+        
+        return max_identity
     
     def _apply_motif_snapping(self, 
                               state: Dict[str, Any],
                               dsl_constraints: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply motif snapping when entering motif windows."""
-        # This would implement motif snapping logic
-        # For now, return unchanged state
-        return state
+        """
+        Apply motif snapping when entering motif windows.
+        
+        When pos1 enters a motif window, snap to the DFA path and smooth gate bias
+        for ~3 tokens; set boundary_reset=true in provenance.
+        """
+        updated_state = state.copy()
+        pos1 = state['pos1']
+        
+        # Check if we're entering any motif window
+        motif_windows = dsl_constraints.get('windows', [])
+        dfa_tables = dsl_constraints.get('dfa_tables', [])
+        
+        for motif_idx, (start_pos, end_pos) in enumerate(motif_windows):
+            # Check if we just entered this motif window
+            if pos1 == start_pos and pos1 < end_pos:
+                # Snap to DFA path
+                dfa_table = dfa_tables[motif_idx]
+                
+                # Set motif indicator for next few tokens
+                motif_length = min(3, end_pos - start_pos)  # ~3 tokens or remaining window
+                
+                # Update state with motif snapping info
+                updated_state['motif_active'] = True
+                updated_state['motif_idx'] = motif_idx
+                updated_state['motif_start'] = start_pos
+                updated_state['motif_end'] = end_pos
+                updated_state['motif_length'] = motif_length
+                updated_state['dfa_table'] = dfa_table
+                
+                # Set boundary reset flag in provenance
+                if 'provenance_cache' not in updated_state:
+                    updated_state['provenance_cache'] = {}
+                if 'boundary_reset' not in updated_state['provenance_cache']:
+                    updated_state['provenance_cache']['boundary_reset'] = False
+                
+                updated_state['provenance_cache']['boundary_reset'] = True
+                
+                # Smooth gate bias for motif tokens
+                if hasattr(self, 'controller'):
+                    # Compute smoothed gate bias for motif region
+                    motif_gate_bias = self._compute_motif_gate_bias(
+                        start_pos, end_pos, motif_length
+                    )
+                    updated_state['motif_gate_bias'] = motif_gate_bias
+                
+                break
+        
+        return updated_state
+    
+    def _compute_motif_gate_bias(self, start_pos: int, end_pos: int, motif_length: int) -> torch.Tensor:
+        """Compute smoothed gate bias for motif region."""
+        # Create smooth transition for gate bias
+        # Start with lower copy probability (higher gate) and gradually increase
+        gate_bias = torch.zeros(motif_length)
+        
+        for i in range(motif_length):
+            # Smooth transition: start with high gate (low copy), end with balanced
+            progress = i / (motif_length - 1) if motif_length > 1 else 0.0
+            gate_bias[i] = 0.8 - 0.3 * progress  # 0.8 -> 0.5
+        
+        return gate_bias

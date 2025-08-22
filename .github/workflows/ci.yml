@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-${{ matrix.python-version }}-
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Test PyTorch installation
+      run: |
+        python - <<<'import torch; print(f"PyTorch version: {torch.__version__}")'
+        python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+    
+    - name: Run system tests
+      run: |
+        python test_system.py
+    
+    - name: Test FSA masks non-empty
+      run: |
+        python -c "
+        from constraints.fsa import create_dfa_table
+        dfa = create_dfa_table('G X S X G')
+        assert dfa.shape == (5, 20), f'Expected shape (5, 20), got {dfa.shape}'
+        assert dfa.any(), 'DFA table should have some True values'
+        print('✅ FSA masks are non-empty')
+        "
+    
+    - name: Test compiler round-trip
+      run: |
+        python -c "
+        from dsl.compiler import DSLCompiler
+        import tempfile
+        import os
+        
+        compiler = DSLCompiler()
+        dsl_json = '{\"length\": [100, 200], \"motifs\": [{\"name\": \"test\", \"dfa\": \"A B C\", \"window\": [10, 20]}]}'
+        
+        # Parse and compile
+        dsl_obj = compiler.parse_dsl(dsl_json)
+        compiled = compiler.compile_to_constraints(dsl_obj)
+        
+        # Save and reload
+        with tempfile.NamedTemporaryFile(suffix='.npz', delete=False) as f:
+            temp_path = f.name
+        
+        try:
+            compiler.save_compiled(compiled, temp_path)
+            reloaded = compiler.load_compiled(temp_path)
+            
+            # Verify round-trip
+            assert 'dfa_tables' in reloaded
+            assert 'windows' in reloaded
+            print('✅ Compiler round-trip successful')
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+        "
+    
+    - name: Test ledger chain verification
+      run: |
+        python -c "
+        from models.provenance.ledger import ProvenanceLedger
+        import tempfile
+        import os
+        
+        # Create temporary ledger
+        with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+            temp_path = f.name
+        
+        try:
+            ledger = ProvenanceLedger(temp_path)
+            
+            # Add test entry
+            entry_hash = ledger.add_entry(
+                prompt='Test prompt',
+                dsl_constraints={'test': 'constraints'},
+                retrieval_ids=['id1', 'id2'],
+                model_checkpoint='test_checkpoint',
+                training_config={'loss_weights': {'gate': 0.5}},
+                output_sequences=[{'sequence': [1, 2, 3]}],
+                metrics={'copy_rate': 0.3, 'max_identity': 0.4}
+            )
+            
+            # Verify chain integrity
+            assert entry_hash is not None
+            assert len(ledger.ledger_entries) == 1
+            assert ledger.verify_chain()
+            print('✅ Ledger chain verification successful')
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+        "

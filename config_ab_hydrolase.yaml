@@ -1,0 +1,121 @@
+# Configuration specifically for Alpha/Beta Hydrolase training
+
+model:
+  name: "AB_Hydrolase_PointerGen"
+  d_model: 896
+  n_heads: 14
+  n_layers: 14
+  d_ff: 3584
+  dropout: 0.1
+  max_length: 350
+
+data:
+  train_path: "data/processed/train.parquet"
+  val_path: "data/processed/val.parquet"
+  test_path: "data/processed/test.parquet"
+  
+  # AB Hydrolase specific parameters
+  min_length: 220
+  max_length: 350
+  exemplars_per_sample: 10
+  use_exemplars: true
+  
+  # Motif specifications for AB hydrolases
+  key_motifs:
+    nucleophile_elbow:
+      pattern: "G X S X G"
+      importance: 1.0
+      typical_position: [100, 180]
+    catalytic_triad:
+      patterns: ["S D H", "S E H"]
+      importance: 0.9
+      typical_position: [150, 250]
+    oxyanion_hole:
+      pattern: "[HQN] G [GA]"
+      importance: 0.7
+      typical_position: [70, 120]
+
+retrieval:
+  use_retrieval: true
+  index_path: "data/processed/retrieval_index"
+  embedding_model: "esm2_t33_650M"
+  embedding_dim: 1280
+  top_k: 10
+  similarity_threshold: 0.7
+
+training:
+  batch_size: 32
+  batch_tokens: 65536
+  epochs: 15
+  learning_rate: 2e-4
+  warmup_steps: 2000
+  gradient_clip: 1.0
+  
+  # AB Hydrolase-specific loss weights
+  loss_weights:
+    ce_loss: 1.0
+    gate_loss: 0.5
+    copy_loss: 0.4  # Higher for conserved family
+    identity_loss: 0.3
+    motif_loss: 0.5  # Extra weight for motif regions
+  
+  # Curriculum for AB hydrolases
+  curriculum:
+    stages:
+      - name: "basic"
+        epochs: [0, 3]
+        focus: "sequence_generation"
+        enforce_motifs: false
+        use_exemplars: false
+        
+      - name: "motif_learning"
+        epochs: [4, 7]
+        focus: "motif_placement"
+        enforce_motifs: true
+        use_exemplars: false
+        motif_weight_multiplier: 2.0
+        
+      - name: "exemplar_integration"
+        epochs: [8, 11]
+        focus: "copy_mechanism"
+        enforce_motifs: true
+        use_exemplars: true
+        copy_forcing_rate: 0.15
+        
+      - name: "fine_tuning"
+        epochs: [12, 15]
+        focus: "novelty_balance"
+        enforce_motifs: true
+        use_exemplars: true
+        identity_penalty_weight: 0.5
+
+evaluation:
+  metrics:
+    - gxsxg_presence  # AB hydrolase specific
+    - gxsxg_position_accuracy
+    - catalytic_triad_presence
+    - oxyanion_hole_presence
+    - constraint_satisfaction
+    - novelty_check
+    - fold_stability_prediction
+    
+  ab_hydrolase_specific:
+    required_motifs: ["nucleophile_elbow"]
+    preferred_motifs: ["catalytic_triad", "oxyanion_hole"]
+    min_motif_confidence: 0.8
+    
+monitoring:
+  track_motif_placement: true
+  track_conservation_copying: true
+  log_every_n_steps: 100
+  eval_every_n_steps: 500
+  save_checkpoint_every_n_steps: 1000
+  
+  # AB hydrolase specific monitors
+  ab_hydrolase_monitors:
+    gxsxg_accuracy:
+      target: 0.95
+      warning_threshold: 0.85
+    catalytic_residue_conservation:
+      target: 0.90
+      warning_threshold: 0.80

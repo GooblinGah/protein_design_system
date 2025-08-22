@@ -102,7 +102,7 @@ class DSLCompiler:
         np.savez_compressed(
             output_path,
             dfa_tables=compiled["dfa_tables"],
-            windows=compiled["dfa_tables"],
+            windows=compiled["windows"],
             length=compiled["length"],
             negatives=compiled["negatives"],
             tags=compiled["tags"]

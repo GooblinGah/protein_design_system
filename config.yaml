@@ -1,0 +1,41 @@
+seed: 1337
+device: "cuda"
+model:
+  d_model: 896
+  n_layers: 14
+  n_heads: 14
+  vocab_size: 23  # 20 AA + BOS/EOS/PAD
+  dropout: 0.1
+training:
+  batch_tokens: 65536
+  epochs: 12
+  amp: true
+  grad_clip: 1.0
+optimizer:
+  name: adamw
+  lr_decoder: 3.0e-4
+  lr_pointer: 1.0e-4
+  betas: [0.9, 0.95]
+  weight_decay: 0.05
+scheduler:
+  kind: cosine
+  warmup_steps: 2000
+curriculum:
+  stages: [{epoch_end:2},{epoch_end:5},{epoch_end:8},{epoch_end:12}]
+  loss_weights:
+    gate: 0.5
+    copy: 0.5
+    identity: 0.2
+novelty:
+  max_single_identity: 0.70
+controller:
+  z_soft: 0.7
+  z_hard: 1.5
+  hysteresis_min_tokens: 3
+retrieval:
+  k: 8
+  method: "esm2_faiss"  # ["kmer", "esm2_faiss"]
+paths:
+  data_root: "data/"
+  index_root: "data/index/"
+  runs_root: "runs/"

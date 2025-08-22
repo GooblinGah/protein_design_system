@@ -1,0 +1,4 @@
+        # Decoder forward pass
+        hidden_states = embeddings
+        for layer in self.decoder_layers:
+            hidden_states = layer(hidden_states)

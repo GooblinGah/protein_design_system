@@ -21,11 +21,11 @@ class ProvenanceLedger:
         self.ledger_entries = []
         self.last_hash = None
         
+        # Logging - initialize before loading ledger
+        self.logger = logging.getLogger(__name__)
+        
         # Load existing ledger if it exists
         self._load_ledger()
-        
-        # Logging
-        self.logger = logging.getLogger(__name__)
     
     def _load_ledger(self):
         """Load existing ledger from file."""
@@ -100,6 +100,142 @@ class ProvenanceLedger:
         self._save_provenance(entry, output_sequences)
         
         self.logger.info(f"Added ledger entry with hash: {entry['output_hash']}")
+        return entry['output_hash']
+    
+    def log_generation_decision(self,
+                               prompt: str,
+                               dsl_constraints: Dict[str, Any],
+                               exemplars: List[str],
+                               generated_sequences: List[Dict[str, Any]],
+                               beam_pruning_info: Dict[str, Any],
+                               identity_constraints: Dict[str, Any]) -> str:
+        """
+        Log generation decision with identity constraints and beam pruning.
+        
+        Args:
+            prompt: Natural language prompt
+            dsl_constraints: Compiled DSL constraints
+            exemplars: List of exemplar sequences
+            generated_sequences: Final generated sequences
+            beam_pruning_info: Information about beam pruning during decoding
+            identity_constraints: Identity constraint configuration
+            
+        Returns:
+            Hash of the new entry
+        """
+        # Create entry
+        entry = {
+            'prev_hash': self.last_hash,
+            'ts': datetime.now().isoformat(),
+            'entry_type': 'generation_decision',
+            'prompt_sha256': self._sha256(prompt),
+            'dsl_sha256': self._sha256(json.dumps(dsl_constraints, sort_keys=True)),
+            'exemplar_count': len(exemplars),
+            'exemplar_hashes': [self._sha256(seq) for seq in exemplars],
+            'identity_constraints': {
+                'max_identity_threshold': identity_constraints.get('max_identity_threshold', 0.70),
+                'enforced_during_expansion': identity_constraints.get('enforce_during_expansion', True),
+                'enforced_at_finalization': identity_constraints.get('enforce_at_finalization', True)
+            },
+            'beam_pruning': {
+                'total_beams_expanded': beam_pruning_info.get('total_beams', 0),
+                'beams_pruned_by_identity': beam_pruning_info.get('pruned_by_identity', 0),
+                'pruning_steps': beam_pruning_info.get('pruning_steps', []),
+                'max_identity_observed': beam_pruning_info.get('max_identity_observed', 0.0)
+            },
+            'generation_results': {
+                'num_sequences': len(generated_sequences),
+                'sequence_hashes': [],
+                'sequence_metrics': []
+            }
+        }
+        
+        # Add sequence details
+        for seq_info in generated_sequences:
+            sequence = seq_info.get('sequence', '')
+            entry['generation_results']['sequence_hashes'].append(self._sha256(sequence))
+            
+            # Extract metrics from sequence info
+            seq_metrics = {
+                'length': len(sequence),
+                'max_identity': seq_info.get('provenance', {}).get('max_identity', 0.0),
+                'logprob': seq_info.get('logprob', 0.0),
+                'beam_rank': seq_info.get('beam_rank', 0)
+            }
+            entry['generation_results']['sequence_metrics'].append(seq_metrics)
+        
+        # Compute output hash
+        output_content = json.dumps(generated_sequences, sort_keys=True)
+        entry['output_hash'] = self._sha256(output_content)
+        
+        # Add to ledger
+        self.ledger_entries.append(entry)
+        self.last_hash = entry['output_hash']
+        
+        # Save to file
+        self._save_entry(entry)
+        
+        # Save detailed provenance
+        self._save_provenance(entry, generated_sequences)
+        
+        self.logger.info(f"Logged generation decision with hash: {entry['output_hash'][:8]}")
+        
+        return entry['output_hash']
+    
+    def log_identity_violation(self,
+                              prompt: str,
+                              sequence: str,
+                              exemplars: List[str],
+                              max_identity: float,
+                              threshold: float,
+                              pruning_step: str) -> str:
+        """
+        Log identity constraint violation during generation.
+        
+        Args:
+            prompt: Natural language prompt
+            sequence: Sequence that violated constraint
+            exemplars: List of exemplar sequences
+            max_identity: Maximum identity observed
+            threshold: Identity threshold that was violated
+            pruning_step: When the violation occurred (expansion/finalization)
+            
+        Returns:
+            Hash of the new entry
+        """
+        entry = {
+            'prev_hash': self.last_hash,
+            'ts': datetime.now().isoformat(),
+            'entry_type': 'identity_violation',
+            'prompt_sha256': self._sha256(prompt),
+            'sequence_sha256': self._sha256(sequence),
+            'exemplar_hashes': [self._sha256(seq) for seq in exemplars],
+            'violation_details': {
+                'max_identity': max_identity,
+                'threshold': threshold,
+                'violation_margin': max_identity - threshold,
+                'pruning_step': pruning_step
+            },
+            'constraint_enforcement': {
+                'enforced_during_expansion': True,
+                'enforced_at_finalization': True,
+                'action_taken': 'beam_pruned' if pruning_step == 'expansion' else 'sequence_rejected'
+            }
+        }
+        
+        # Compute output hash
+        output_content = json.dumps(entry, sort_keys=True)
+        entry['output_hash'] = self._sha256(output_content)
+        
+        # Add to ledger
+        self.ledger_entries.append(entry)
+        self.last_hash = entry['output_hash']
+        
+        # Save to file
+        self._save_entry(entry)
+        
+        self.logger.warning(f"Logged identity violation: {max_identity:.3f} > {threshold:.3f} at {pruning_step}")
+        
         return entry['output_hash']
     
     def _sha256(self, content: str) -> str:

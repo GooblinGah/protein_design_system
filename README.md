@@ -1,242 +1,343 @@
-# Protein Design System - Complete Implementation
+# Protein Design System
 
-A sophisticated protein sequence generation system based on natural language prompts with structural constraints and novelty requirements.
+A complete, production-ready system for designing proteins using deep learning with constraint satisfaction, exemplar retrieval, and provenance tracking.
 
-## 🎯 **System Overview**
+## 🚀 Quick Start
 
-This system generates novel protein sequences that:
-- **Satisfy motif/length constraints** via FSA constraint engine
-- **Maintain novelty** (≤70% global identity to any single exemplar)
-- **Include per-residue provenance** and confidence tiers
-- **Use pointer-generator mechanism** with copy generation from exemplars
-- **Implement Segmental-HMM pacing** between motif anchors
+### 1. Setup Environment
+```bash
+# Create conda environment
+conda create -n protein_design python=3.9 -y
+conda activate protein_design
 
-## 🏗️ **Complete Architecture**
+# Install dependencies
+pip install -r requirements.txt
 
-### **Core Components (All Implemented)**
-1. ✅ **FSA Constraint Engine** - Vectorized motif validation
-2. ✅ **DSL Compiler** - Human-readable to constraint compilation
-3. ✅ **Protein Tokenizer** - 20 AA + special tokens with batching
-4. ✅ **Segmental-HMM Controller** - Duration prediction and pacing control
-5. ✅ **Copy Head** - Pointer-generator copy mechanism
-6. ✅ **Gate Head** - Mixture control between generation/copy
-7. ✅ **Pointer-Generator Decoder** - Complete Transformer-based decoder
-8. ✅ **Training Infrastructure** - Loops, curriculum, and monitoring
-9. ✅ **FSA-Constrained Decoding** - Beam search with constraints
-10. ✅ **Provenance & Ledger** - Hash-chained tracking system
-11. ✅ **CLI Interface** - Training and inference commands
+# Install bioinformatics tools
+conda install -c bioconda hmmer muscle cd-hit
+```
 
-### **Project Structure**
+### 2. Run End-to-End Training (Alpha/Beta Hydrolases)
+```bash
+# Make scripts executable
+chmod +x scripts/*.sh run_complete_ab_hydrolase_training.sh
+
+# Run complete pipeline
+./run_complete_ab_hydrolase_training.sh
+```
+
+### 3. Manual Step-by-Step
+```bash
+# Collect data
+python scripts/collect_ab_hydrolase_data.py
+
+# Prepare training data with clustering
+python scripts/prepare_ab_hydrolase_training.py
+
+# Build retrieval index
+python scripts/build_retrieval_index.py --data data/processed/train.parquet --output data/processed/retrieval_index
+
+# Start training
+python train_ab_hydrolase_model.py --config config_ab_hydrolase.yaml
+```
+
+## 🎯 What This System Does
+
+### Core Capabilities
+- **Protein Sequence Generation**: Generate novel protein sequences from natural language prompts
+- **Constraint Satisfaction**: Enforce structural and functional constraints using FSA-based validation
+- **Exemplar Retrieval**: Use FAISS to find similar sequences for copy mechanisms
+- **Identity Governance**: Hard ≤0.70 identity cap during decoding to ensure novelty
+- **Provenance Tracking**: Hash-chained ledger for all design decisions
+
+### Specialized for Alpha/Beta Hydrolases
+- **Domain-Specific Data**: 30k-50k curated sequences from UniProt
+- **Motif Detection**: GXSXG nucleophile elbow, catalytic triad, oxyanion hole
+- **Structural Validation**: PDB integration for high-resolution structures
+- **Curriculum Learning**: Progressive introduction of motifs and exemplars
+
+## 📊 Expected Performance
+
+```python
+expected_performance = {
+    "dataset_size": "30,000-50,000 sequences",
+    "training_time": "48-72 hours on single A100",
+    "expected_metrics": {
+        "gxsxg_motif_accuracy": ">95%",
+        "constraint_satisfaction": ">90%",
+        "novelty_rate": ">80% (<70% identity)",
+        "valid_fold_prediction": ">75%"
+    },
+    "convergence": "10-12 epochs",
+    "final_loss": "<1.5"
+}
+```
+
+## 🏗️ System Architecture
+
+### Data Pipeline
+```
+Raw Sequences (UniProt) → Motif Extraction → Clustering (CD-HIT) → Leakage-Aware Splits
+```
+
+### Model Architecture
+```
+Prompt + DSL → FSA Constraints → Pointer Generator → Identity Validation → Output
+```
+
+### Key Components
+- **`data/`**: Dataset handling, preprocessing, retrieval, alignment
+- **`models/`**: Tokenizer, decoder, FSA constraints, provenance
+- **`evaluation/`**: Metrics, validation, constraint checking
+- **`training/`**: Trainer with curriculum learning
+- **`scripts/`**: Data collection, clustering, validation
+
+## 🔧 Configuration
+
+### Main Config (`config.yaml`)
+- Model architecture parameters
+- Training hyperparameters
+- Evaluation thresholds
+
+### AB Hydrolase Config (`config_ab_hydrolase.yaml`)
+- Domain-specific settings
+- Motif definitions
+- Curriculum stages
+
+### Validation
+```bash
+# Validate configuration
+python scripts/validate_config.py --config config_ab_hydrolase.yaml --generate-manifest
+```
+
+## 📁 File Structure
+
 ```
 protein_design_system/
-├── constraints/          # FSA constraint engine
-├── dsl/                 # DSL parser and compiler
-├── models/              # Neural network models
-│   ├── controller/      # Segmental-HMM controller
-│   ├── decoder/         # Pointer-Generator decoder
-│   ├── heads/           # Copy and gate heads
-│   ├── decoding/        # FSA-constrained decoding
-│   ├── provenance/      # Provenance tracking
-│   └── tokenizer.py     # Protein sequence tokenizer
-├── training/            # Training infrastructure
-├── cli/                 # Command-line interfaces
-├── examples/            # Usage examples
-├── tests/               # Test scripts
-├── requirements.txt     # Python dependencies
-├── config.yaml         # Configuration file
-└── test_system.py      # Comprehensive system test
+├── data/                          # Data handling modules
+│   ├── dataset.py                # ProteinDesignDataset
+│   ├── retrieval.py              # ExemplarRetriever
+│   ├── alignment.py              # AlignmentProcessor
+│   └── preprocessing.py          # Data preprocessing
+├── models/                        # Model components
+│   ├── decoder/                  # Decoder implementations
+│   ├── tokenizer.py              # Protein tokenizer
+│   └── provenance/               # Provenance tracking
+├── evaluation/                    # Evaluation and validation
+│   ├── metrics.py                # ProteinDesignEvaluator
+│   └── validator.py              # ConstraintValidator
+├── training/                      # Training infrastructure
+│   └── trainer.py                # Main trainer
+├── scripts/                       # Utility scripts
+│   ├── collect_ab_hydrolase_data.py
+│   ├── cluster_splits.py         # CD-HIT clustering
+│   └── validate_config.py        # Configuration validation
+├── config_ab_hydrolase.yaml      # AB Hydrolase config
+├── requirements.txt               # Dependencies
+└── README.md                     # This file
 ```
 
-## 🚀 **Quick Start**
+## 🧪 Testing & CI
 
-### **Installation**
+### Run Tests
 ```bash
-git clone <repository>
-cd protein_design_system
-pip install -r requirements.txt
+# Test imports
+python -c "from data import ProteinDesignDataset; print('✅ Data modules work')"
+
+# Test evaluation
+python -c "from evaluation import ProteinDesignEvaluator; print('✅ Evaluation works')"
+
+# Test configuration
+python scripts/validate_config.py --config config_ab_hydrolase.yaml
 ```
 
-### **Test the System**
-```bash
-python test_system.py
-```
+### GitHub Actions
+- Automatic testing on push/PR
+- Unit tests for critical components
+- Configuration validation
+- Model initialization tests
 
-### **Basic Usage**
+## 🚨 Critical Features
 
-#### **1. DSL Compilation**
+### Hard Identity Cap During Decoding
 ```python
-from dsl.compiler import DSLCompiler
+# Fast identity estimation during beam expansion
+max_id = fast_identity_estimate(new_prefix, exemplars_tokens)
+if max_id >= cfg.eval.max_identity_threshold:
+    score = -inf  # prune beam
 
-# Define protein: "secreted esterase, <330 aa, GXSXG motif, pH ~7"
-dsl_spec = {
-    "length": [230, 330],
-    "motifs": [{"name": "esterase_gxsxg", "dfa": "G X S X G", "window": [50, 90]}],
-    "tags": ["pH~7", "secreted"]
-}
-
-compiler = DSLCompiler()
-constraints = compiler.compile_to_constraints(dsl_spec)
+# Full alignment validation at finalization
+final_identity = compute_identity(sequence, exemplars)
+if final_identity > threshold:
+    sequence_rejected = True
 ```
 
-#### **2. FSA Constraint Checking**
-```python
-from constraints.fsa import FSAConstraintEngine, create_dfa_table
-
-engine = FSAConstraintEngine()
-dfa_table = create_dfa_table("G X S X G")
-windows = torch.tensor([[[50, 90]]])
-
-# Check constraints at position 60
-allowed = engine.allowed_tokens(0, windows, [dfa_table], torch.tensor([60]))
-```
-
-#### **3. Model Training**
+### Leakage-Aware Dataset Splits
 ```bash
-python cli/train.py --config config.yaml --output_dir runs/
+# Use CD-HIT clustering at 30% identity
+python scripts/cluster_splits.py --sequences data/raw/sequences.csv --identity 0.30
+
+# Creates train/val/test with no sequence leakage
+# Saves cluster map for reproducibility
 ```
 
-## 🔧 **Key Features**
+### Provenance Tracking
+```python
+# Log all generation decisions
+ledger.log_generation_decision(
+    prompt=prompt,
+    dsl_constraints=constraints,
+    exemplars=exemplars,
+    generated_sequences=sequences,
+    beam_pruning_info=pruning_info,
+    identity_constraints=identity_config
+)
+```
 
-### **Constraint System**
-- **Vectorized FSA** for efficient motif validation
-- **Pattern-based DFA** creation (e.g., "G X S X G")
-- **Runtime constraint checking** during generation
-- **Batch processing** support
+## 📈 Training Workflow
 
-### **Neural Architecture**
-- **Transformer-based decoder** (configurable layers/heads)
-- **Pointer-generator mechanism** with copy generation
-- **Segmental-HMM controller** for pacing control
-- **Multi-head attention** with copy/gate heads
+### 1. Data Collection
+- UniProt API integration
+- Motif detection and validation
+- Structural data from PDB
 
-### **Training System**
-- **Curriculum-based training** with staged losses
-- **Dynamic loss adjustment** based on metrics
-- **Comprehensive monitoring** with auto-nudges
-- **Checkpoint management** and resumption
+### 2. Data Preparation
+- CD-HIT clustering at 30% identity
+- Leakage-aware train/val/test splits
+- Quality filtering and validation
 
-### **Decoding System**
-- **FSA-constrained beam search**
-- **Identity governance** for novelty maintenance
-- **Motif snapping** and annealing
-- **Provenance tracking** per residue
+### 3. Model Training
+- Curriculum learning stages
+- Motif placement emphasis
+- Exemplar integration
 
-## 📊 **Configuration**
+### 4. Evaluation
+- Constraint satisfaction metrics
+- Motif accuracy tracking
+- Novelty validation
 
-The system is fully configurable via `config.yaml`:
+## 🔍 Monitoring & Debugging
 
+### Training Logs
+```bash
+# Monitor training progress
+tail -f runs/experiment_1/training.log
+
+# Check metrics
+cat runs/experiment_1/metrics.json
+```
+
+### Provenance Ledger
+```bash
+# View design decisions
+cat ledger.jsonl | jq '.entry_type'
+
+# Check identity violations
+cat ledger.jsonl | jq 'select(.entry_type == "identity_violation")'
+```
+
+### Configuration Validation
+```bash
+# Preflight check
+python scripts/validate_config.py --config config_ab_hydrolase.yaml
+
+# Generate run manifest
+python scripts/validate_config.py --config config_ab_hydrolase.yaml --generate-manifest
+```
+
+## 🚀 Performance Optimization
+
+### Memory Management
 ```yaml
-model:
-  d_model: 896
-  n_layers: 14
-  n_heads: 14
-
+# Reduce batch size for large models
 training:
-  batch_tokens: 65536
-  epochs: 12
-  curriculum:
-    stages: [{epoch_end:2}, {epoch_end:5}, {epoch_end:8}]
-
-novelty:
-  max_single_identity: 0.70
-
-controller:
-  z_soft: 0.7
-  z_hard: 1.5
+  batch_size: 16  # Reduce from 32
+  batch_tokens: 32768  # Reduce from 65536
 ```
 
-## 🧪 **Testing & Validation**
+### Embedding Models
+```yaml
+# Use smaller model for indexing
+retrieval:
+  embedding_model: "esm2_t12_35M_UR50D"  # 35M vs 650M parameters
+  embedding_dim: 480  # Reduced dimension
+```
 
-### **Comprehensive Test Suite**
+### GPU Optimization
+```yaml
+# Enable mixed precision
+training:
+  amp: true  # Automatic Mixed Precision
+  fp16: true # 16-bit training
+```
+
+## 🆘 Troubleshooting
+
+### Common Issues
+
+#### 1. UniProt API Limits
 ```bash
-python test_system.py
+# Error: HTTP 429 (Too Many Requests)
+# Solution: Increase sleep time in collect_ab_hydrolase_data.py
+time.sleep(1.0)  # Increase from 0.5s to 1.0s
 ```
 
-Tests cover:
-- Module imports and dependencies
-- FSA constraint engine functionality
-- DSL compilation and parsing
-- Tokenizer encoding/decoding
-- Neural network forward passes
-- Training component integration
-- End-to-end system functionality
+#### 2. Memory Issues
+```yaml
+# Reduce batch size in config
+training:
+  batch_size: 16  # Reduce from 32
+```
 
-### **Unit Tests**
-- Individual component testing
-- Edge case validation
-- Performance benchmarking
-- Constraint satisfaction verification
+#### 3. Missing External Tools
+```bash
+# Install bioinformatics tools
+conda install -c bioconda hmmer muscle cd-hit
 
-## 📈 **Training Pipeline**
+# Or use pyhmmer alternative
+pip install pyhmmer
+```
 
-### **Curriculum Stages**
-1. **Stage 0-2**: CE loss only, gate fixed
-2. **Stage 3-5**: Add gate loss
-3. **Stage 6-8**: Add copy loss, enable controller
-4. **Stage 9+**: Add identity regularizer
+### Getting Help
+1. Check the logs: `tail -f runs/experiment_1/training.log`
+2. Validate configuration: `python scripts/validate_config.py --config config.yaml`
+3. Test components: `python -c "from data import ProteinDesignDataset"`
+4. Check CI status: GitHub Actions tab
 
-### **Monitoring & Auto-nudges**
-- **Copy rate monitoring** (target ≥0.5)
-- **Gate entropy tracking** (≤0.5 nats)
-- **Identity governance** (warn at 0.65, clamp at 0.70)
-- **Automatic weight adjustment** based on metrics
+## 📚 Documentation
 
-## 🔍 **Provenance & Tracking**
+- **`AB_HYDROLASE_PIPELINE.md`**: Complete AB Hydrolase training guide
+- **`RUN_TRAINING.md`**: General training workflow documentation
+- **`IMPLEMENTATION_SUMMARY.md`**: Technical implementation details
 
-### **Per-Residue Provenance**
-- **Confidence tiers**: normal/stretched/sparse
-- **Copy vs generate** attribution
-- **Exemplar contribution** weights
-- **Parquet storage** for efficiency
+## 🤝 Contributing
 
-### **Hash-Chained Ledger**
-- **Immutable audit trail** of all generations
-- **Configuration tracking** and versioning
-- **Metrics and performance** logging
-- **JSONL format** with SHA256 hashing
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure CI passes
+5. Submit a pull request
 
-## 🚀 **Performance & Scalability**
+## 📄 License
 
-### **Optimizations**
-- **Vectorized operations** for constraint checking
-- **Batch processing** for training and inference
-- **GPU acceleration** with PyTorch
-- **Memory-efficient** attention mechanisms
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-### **Scalability**
-- **Configurable model sizes** (180M-300M parameters)
-- **Multi-GPU training** support
-- **Efficient data loading** and preprocessing
-- **Modular architecture** for easy extension
+## 🙏 Acknowledgments
 
-## 📚 **Documentation**
+- **ESM2 Models**: Facebook AI Research
+- **FAISS**: Facebook AI Research
+- **CD-HIT**: Weizhong Li Lab
+- **HMMER**: Sean Eddy Lab
+- **MUSCLE**: Robert Edgar
 
-- **Implementation Status**: `IMPLEMENTATION_STATUS.md`
-- **Quick Start Guide**: `QUICKSTART.md`
-- **API Documentation**: Inline code comments
-- **Configuration Guide**: `config.yaml` with comments
+## 🎯 Next Steps
 
-## 🤝 **Contributing**
+1. **Run the quickstart** to get familiar with the system
+2. **Customize for your protein family** by modifying the data collection
+3. **Scale up training** with multi-GPU or distributed training
+4. **Add new constraints** by extending the FSA constraint engine
+5. **Integrate with experimental validation** pipelines
 
-This is a research implementation following the v1.0 specification. The modular design allows for:
+---
 
-- **Easy extension** of components
-- **Custom constraint types**
-- **New training strategies**
-- **Additional monitoring metrics**
-
-## 📄 **License**
-
-Research implementation - refer to original specification for requirements and design decisions.
-
-## 🎉 **Status: COMPLETE**
-
-**All major components are fully implemented and tested.** The system is ready for:
-
-- ✅ **Training** on protein datasets
-- ✅ **Inference** with natural language prompts
-- ✅ **Constraint satisfaction** via FSA engine
-- ✅ **Novelty maintenance** through identity governance
-- ✅ **Provenance tracking** for all generations
-
-**Run `python test_system.py` to verify the complete implementation!**
+**Ready to design proteins? Start with the [AB Hydrolase Pipeline](AB_HYDROLASE_PIPELINE.md) for a complete example!**

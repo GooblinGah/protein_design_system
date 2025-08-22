@@ -98,15 +98,12 @@ class FSAConstrainedDecoder:
             'pos1': 0,
             'dfa_states': [],
             'segment_id': 0,
-            'emitted_j': 0,
-            'c_t': 0,
-            'gate_bias_state': 0.0,
+            'finished': False,
             'provenance_cache': {
-                'lambda_history': [],
                 'tiers': [],
+                'lambda_history': [],
                 'boundary_reset': False
-            },
-            'finished': False
+            }
         }
         
         return [initial_state]
@@ -118,7 +115,7 @@ class FSAConstrainedDecoder:
                       exemplars: torch.Tensor,
                       column_feats: torch.Tensor,
                       c_t: torch.Tensor) -> List[Dict[str, Any]]:
-        """Expand all beams with next tokens."""
+        """Expand all beams with next token predictions."""
         expanded_states = []
         
         for state in beam_states:
@@ -126,76 +123,75 @@ class FSAConstrainedDecoder:
                 expanded_states.append(state)
                 continue
             
-            # Get current position and constraints
-            pos1 = state['pos1']
-            windows = torch.tensor([dsl_constraints['windows']], device=self.device)
-            dfa_tables = [torch.tensor(table, device=self.device) for table in dsl_constraints['dfa_tables']]
+            # Get next token predictions
+            next_tokens = self._get_next_tokens(state, dsl_constraints, exemplars, 
+                                              column_feats, c_t)
             
-            # Get allowed tokens from FSA
-            allowed_tokens = self.constraint_engine.allowed_tokens(
-                step, windows, dfa_tables, torch.tensor([pos1], device=self.device)
-            )
-            
-            # Get model predictions
-            input_ids = torch.tensor([state['prefix_ids']], device=self.device)
-            logits_vocab, p_copy, gate_logits, lambda_ik = self.model(
-                input_ids, exemplars.unsqueeze(0), column_feats.unsqueeze(0), 
-                torch.tensor([state['c_t']], device=self.device), None
-            )
-            
-            # Apply constraints
-            logits_vocab = logits_vocab.squeeze(0)
-            logits_vocab[~allowed_tokens[0]] = float('-inf')
-            
-            # Get top candidates
-            top_logits, top_indices = torch.topk(logits_vocab, self.top_k)
-            
-            # Expand beam for each candidate
-            for logit, token_id in zip(top_logits, top_indices):
-                if token_id == 1:  # EOS token
-                    new_state = state.copy()
-                    new_state['finished'] = True
-                    expanded_states.append(new_state)
-                else:
-                    new_state = self._create_new_state(state, token_id, logit, step)
-                    expanded_states.append(new_state)
+            # Create new states for each token
+            for token_id, logit in next_tokens:
+                new_state = self._create_new_state(state, token_id, logit, step)
+                
+                # Apply motif snapping
+                new_state = self._apply_motif_snapping(new_state, dsl_constraints)
+                
+                # Check identity cap during expansion (fast estimate)
+                if len(new_state['prefix_ids']) > 5:  # Check early
+                    max_id = self._fast_identity_estimate(
+                        new_state['prefix_ids'], 
+                        exemplars
+                    )
+                    if max_id >= self.max_identity:
+                        # Prune beam by setting score to -inf
+                        new_state['logprob'] = float('-inf')
+                        self.logger.debug(f"Pruned beam at step {step}: identity {max_id:.3f} >= {self.max_identity}")
+                
+                expanded_states.append(new_state)
         
         return expanded_states
     
-    def _create_new_state(self, 
-                          old_state: Dict[str, Any],
-                          token_id: int,
-                          logit: float,
-                          step: int) -> Dict[str, Any]:
-        """Create new beam state."""
-        new_state = old_state.copy()
+    def _fast_identity_estimate(self, 
+                               prefix_ids: List[int], 
+                               exemplars: torch.Tensor) -> float:
+        """
+        Fast identity estimation for beam pruning.
+        Uses prefix matching for speed during expansion.
+        """
+        # Filter out special tokens
+        valid_tokens = [token for token in prefix_ids if token > 2]
         
-        # Update sequence
-        new_state['prefix_ids'] = old_state['prefix_ids'] + [token_id.item()]
-        new_state['logprob'] = old_state['logprob'] + logit.item()
+        if not valid_tokens:
+            return 0.0
         
-        # Update position
-        new_state['pos1'] = step + 1
+        max_identity = 0.0
         
-        # Apply motif snapping if entering motif window
-        if hasattr(self, 'dsl_constraints'):
-            new_state = self._apply_motif_snapping(new_state, self.dsl_constraints)
+        for k in range(exemplars.shape[0]):
+            exemplar = exemplars[k]
+            exemplar_tokens = exemplar[exemplar > 2].tolist()
+            
+            if not exemplar_tokens:
+                continue
+            
+            # Use shorter length for prefix matching
+            min_len = min(len(valid_tokens), len(exemplar_tokens))
+            if min_len == 0:
+                continue
+            
+            # Count matches (fast prefix comparison)
+            matches = sum(1 for i in range(min_len) 
+                         if valid_tokens[i] == exemplar_tokens[i])
+            
+            # Estimate identity (conservative estimate)
+            identity = matches / min_len
+            max_identity = max(max_identity, identity)
+            
+            # Early exit if we're already over threshold
+            if max_identity >= self.max_identity:
+                break
         
-        # Update controller state
-        if hasattr(self.controller, 'compute_tier'):
-            tier, gate_bias, advance_factor = self.controller.compute_tier(
-                new_state['emitted_j'], 0.0, 1.0  # Placeholder values
-            )
-            new_state['gate_bias_state'] = gate_bias
-            new_state['provenance_cache']['tiers'].append(tier)
-        
-        # Update provenance
-        new_state['provenance_cache']['lambda_history'].append(0.0)  # Placeholder
-        
-        return new_state
+        return max_identity
     
     def _prune_beams(self, beam_states: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Prune beams based on identity constraints."""
+        """Prune beams based on constraints and identity."""
         pruned_states = []
         
         for state in beam_states:
@@ -232,7 +228,7 @@ class FSAConstrainedDecoder:
                 # Add EOS token if not finished
                 state['prefix_ids'].append(1)
             
-            # Compute final identity score
+            # Compute final identity score using full alignment
             final_identity = self._compute_identity_score(
                 state['prefix_ids'], 
                 self.exemplars
@@ -372,3 +368,73 @@ class FSAConstrainedDecoder:
             gate_bias[i] = 0.8 - 0.3 * progress  # 0.8 -> 0.5
         
         return gate_bias
+
+    def _get_next_tokens(self, 
+                         state: Dict[str, Any],
+                         dsl_constraints: Dict[str, Any],
+                         exemplars: torch.Tensor,
+                         column_feats: torch.Tensor,
+                         c_t: torch.Tensor) -> List[Tuple[int, float]]:
+        """Get next token predictions for a beam state."""
+        # Get current position and constraints
+        pos1 = state['pos1']
+        windows = torch.tensor([dsl_constraints['windows']], device=self.device)
+        dfa_tables = [torch.tensor(table, device=self.device) for table in dsl_constraints['dfa_tables']]
+        
+        # Get allowed tokens from FSA
+        allowed_tokens = self.constraint_engine.allowed_tokens(
+            pos1, windows, dfa_tables, torch.tensor([pos1], device=self.device)
+        )
+        
+        # Get model predictions
+        input_ids = torch.tensor([state['prefix_ids']], device=self.device)
+        logits_vocab, p_copy, gate_logits, lambda_ik = self.model(
+            input_ids, exemplars.unsqueeze(0), column_feats.unsqueeze(0), 
+            torch.tensor([c_t], device=self.device), None
+        )
+        
+        # Apply constraints
+        logits_vocab = logits_vocab.squeeze(0)
+        logits_vocab[~allowed_tokens[0]] = float('-inf')
+        
+        # Get top candidates
+        top_logits, top_indices = torch.topk(logits_vocab, self.top_k)
+        
+        # Return token candidates
+        tokens = []
+        for logit, token_id in zip(top_logits, top_indices):
+            if token_id == 1:  # EOS token
+                # Mark state as finished
+                state['finished'] = True
+                tokens.append((token_id.item(), logit.item()))
+            else:
+                tokens.append((token_id.item(), logit.item()))
+        
+        return tokens
+    
+    def _create_new_state(self, 
+                          old_state: Dict[str, Any],
+                          token_id: int,
+                          logit: float,
+                          step: int) -> Dict[str, Any]:
+        """Create new beam state."""
+        new_state = old_state.copy()
+        
+        # Update sequence
+        new_state['prefix_ids'] = old_state['prefix_ids'] + [token_id]
+        new_state['logprob'] = old_state['logprob'] + logit
+        
+        # Update position
+        new_state['pos1'] = step + 1
+        
+        # Update controller state
+        if hasattr(self.controller, 'compute_tier'):
+            tier, gate_bias, advance_factor = self.controller.compute_tier(
+                step, 0.0, 1.0  # Placeholder values
+            )
+            new_state['provenance_cache']['tiers'].append(tier)
+        
+        # Update provenance
+        new_state['provenance_cache']['lambda_history'].append(0.0)  # Placeholder
+        
+        return new_state

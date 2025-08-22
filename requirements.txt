@@ -1,21 +1,34 @@
-torch>=2.3.0
-numpy>=1.24.0
-scipy>=1.10.0
-einops>=0.7.0
-faiss-gpu>=1.7.0
-biopython>=1.81
-pyhmmer>=0.10.0
-sentence-transformers>=2.2.0
-pandas>=2.0.0
-pyarrow>=12.0.0
-tensorboard>=2.13.0
-wandb>=0.15.0
-pyyaml>=6.0
-tqdm>=4.65.0
-matplotlib>=3.7.0
-seaborn>=0.12.0
+# Core ML dependencies
+torch>=2.0.0,<3.0.0
+torchvision>=0.15.0,<1.0.0
+torchaudio>=2.0.0,<3.0.0
 
-# New dependencies for data and evaluation modules
-transformers>=4.35.0
-faiss-cpu>=1.7.4
-scikit-learn>=1.3.0
+# Protein design specific
+biopython==1.79
+transformers==4.35.0
+faiss-cpu==1.7.4
+sentence-transformers==2.2.2
+
+# Data processing
+pandas==2.0.0
+pyarrow==12.0.0
+numpy==1.24.3
+scipy==1.10.0
+scikit-learn==1.3.0
+
+# Utilities
+tqdm==4.65.0
+pyyaml==6.0
+psutil==5.9.5
+
+# Development and testing
+pytest==7.4.0
+pytest-cov==4.1.0
+black==23.7.0
+flake8==6.0.0
+
+# Optional: GPU support (uncomment if using GPU FAISS)
+# faiss-gpu==1.7.4
+
+# Optional: Bioinformatics tools (if not using conda)
+# pyhmmer==0.7.0  # Alternative to HMMER CLI tools

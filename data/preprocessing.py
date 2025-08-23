@@ -145,7 +145,7 @@ class ProteinDatasetBuilder:
             motif_pattern = annotations['motif']
             # Find motif position in sequence
             motif_start = self.find_motif_position(seq_info['sequence'], motif_pattern)
-            if motif_start:
+            if motif_start is not None:  # Fix: 0 is falsy, so check for None explicitly
                 dsl['motifs'].append({
                     'name': f"{annotations.get('domain', 'domain')}_motif",
                     'pattern': motif_pattern,

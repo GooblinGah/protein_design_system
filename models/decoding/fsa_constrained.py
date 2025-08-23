@@ -34,6 +34,9 @@ class FSAConstrainedDecoder:
         # Novelty constraints
         self.max_identity = config.get('novelty', {}).get('max_single_identity', 0.70)
         
+        # PAD token ID for identity computation
+        self.pad_id = config.get('model', {}).get('pad_id', 2)
+        
         # Device
         self.device = next(model.parameters()).device
         
@@ -257,51 +260,47 @@ class FSAConstrainedDecoder:
         
         return results
     
-    def _compute_identity_score(self, 
-                               sequence: List[int],
-                               exemplars: torch.Tensor) -> float:
+    def _compute_identity_score(self, prefix_ids: torch.Tensor, exemplars) -> float:
         """
-        Compute global % identity of current prefix vs each exemplar.
-        
-        Args:
-            sequence: Current sequence prefix (including BOS/EOS/PAD tokens)
-            exemplars: [K, L] exemplar sequences where K is number of exemplars
-            
-        Returns:
-            Maximum identity score across all exemplars
+        Approximate max identity of the current prefix against K exemplars.
+        Works on token IDs (AA vocab only), ignores pads/specials.
+        Returns a value in [0,1].
         """
-        # Filter out special tokens (BOS=0, EOS=1, PAD=2)
-        valid_tokens = [token for token in sequence if token > 2]
+        if isinstance(exemplars, dict):
+            ex_tokens = exemplars["tokens"]     # [B,K,L]
+        else:
+            ex_tokens = exemplars                # [B,K,L]
         
-        if not valid_tokens:
+        # Use CPU numpy for simplicity here
+        import numpy as np
+        p = prefix_ids.detach().cpu().numpy()    # [T]
+        T = len(p)
+        if T == 0:
             return 0.0
         
-        num_exemplars = exemplars.shape[0]
-        max_identity = 0.0
+        ex = ex_tokens[0].detach().cpu().numpy() # assume batch size 1 inside decode
+        if ex.ndim == 1:
+            # Single exemplar case
+            K, L = 1, ex.shape[0]
+            ex = ex.reshape(1, -1)
+        else:
+            K, L = ex.shape
         
-        for k in range(num_exemplars):
-            exemplar = exemplars[k]
-            
-            # Get exemplar tokens (filter special tokens)
-            exemplar_tokens = exemplar[exemplar > 2].tolist()
-            
-            if not exemplar_tokens:
-                continue
-            
-            # Compute identity for this exemplar
-            # Use shorter length to avoid index errors
-            min_len = min(len(valid_tokens), len(exemplar_tokens))
-            
-            if min_len == 0:
-                continue
-            
-            # Count matches
-            matches = sum(1 for i in range(min_len) if valid_tokens[i] == exemplar_tokens[i])
-            identity = matches / min_len
-            
-            max_identity = max(max_identity, identity)
-        
-        return max_identity
+        # sliding compare of prefix against each exemplar; take best window
+        best = 0.0
+        for k in range(K):
+            row = ex[k]
+            # skip pads (assume pad_id known)
+            pad_id = getattr(self, "pad_id", 2)
+            row = row[row != pad_id]
+            for s in range(0, max(1, len(row) - T + 1)):
+                window = row[s:s+T]
+                if len(window) != T: 
+                    break
+                ident = (window == p).mean()
+                if ident > best:
+                    best = float(ident)
+        return best
     
     def _apply_motif_snapping(self, 
                               state: Dict[str, Any],

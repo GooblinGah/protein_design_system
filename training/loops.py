@@ -31,6 +31,9 @@ class TrainingLoop:
         # Device
         self.device = next(model.parameters()).device
         
+        # PAD token ID
+        self.pad_id = config.get('model', {}).get('pad_id', 2)
+        
         # Logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
@@ -55,7 +58,8 @@ class TrainingLoop:
         
         # Unpack batch
         input_ids = batch['input_ids'].to(self.device)
-        exemplars = batch['exemplars'].to(self.device)
+        ex = batch['exemplars']
+        exemplars = (ex['tokens'] if isinstance(ex, dict) else ex).to(self.device)
         column_feats = batch['column_feats'].to(self.device)
         c_t = batch['c_t'].to(self.device)
         copy_eligible = batch['copy_eligible'].to(self.device)
@@ -103,7 +107,8 @@ class TrainingLoop:
         with torch.no_grad():
             # Unpack batch
             input_ids = batch['input_ids'].to(self.device)
-            exemplars = batch['exemplars'].to(self.device)
+            ex = batch['exemplars']
+            exemplars = (ex['tokens'] if isinstance(ex, dict) else ex).to(self.device)
             column_feats = batch['column_feats'].to(self.device)
             c_t = batch['c_t'].to(self.device)
             copy_eligible = batch['copy_eligible'].to(self.device)
@@ -143,17 +148,17 @@ class TrainingLoop:
         
         # Cross-entropy loss
         p_mixture = self.model.compute_mixture_distribution(logits_vocab, p_copy, gate_logits)
-        ce_loss = F.cross_entropy(
-            p_mixture.view(-1, p_mixture.size(-1)),
-            target_ids.view(-1),
-            ignore_index=0  # PAD token
-        )
+        # NLL over log-probs (p_mixture is a probability distribution, not logits)
+        log_p = torch.log(p_mixture.clamp_min(1e-12)).view(-1, p_mixture.size(-1))
+        t = target_ids.view(-1)
+        ce_loss = F.nll_loss(log_p, t, ignore_index=self.pad_id)
         
         # Gate loss
         gate_targets = (~copy_eligible).float()
         gate_probs = torch.sigmoid(gate_logits)
         gate_loss = F.binary_cross_entropy(gate_probs, gate_targets, reduction='none')
-        gate_loss = gate_loss[target_ids != 0].mean()  # Ignore padding
+        # make this consistent with pad_id too:
+        gate_loss = gate_loss[(target_ids.view_as(gate_logits) != self.pad_id)].mean()
         
         # Copy loss
         copy_loss = self._compute_copy_loss(lambda_ik, exemplars, c_t, target_ids, copy_eligible)
@@ -282,8 +287,35 @@ class TrainingLoop:
         # Per-exemplar identity (max)
         max_identity = 0.0
         if lambda_ik.numel() > 0:
-            # This is a simplified version - would need proper computation
-            max_identity = 0.5  # Placeholder
+            # Compute actual max identity using the same logic as the regularizer
+            batch_size, seq_len, num_exemplars = lambda_ik.shape
+            identity_scores = torch.zeros(batch_size, num_exemplars, device=self.device)
+            
+            for t in range(seq_len):
+                valid_positions = (c_t[:, t] >= 0)
+                if not valid_positions.any():
+                    continue
+                
+                c_t_current = c_t[valid_positions, t]
+                targets = target_ids[valid_positions, t]
+                
+                for b_idx, valid_b in enumerate(valid_positions.nonzero().squeeze(-1)):
+                    c_col = c_t_current[b_idx]
+                    target_aa = targets[b_idx]
+                    
+                    # Check if target matches exemplar
+                    exemplar_aas = exemplars[valid_b, :, c_col]
+                    matches = (exemplar_aas == target_aa)
+                    
+                    # Add to identity scores
+                    identity_scores[valid_b] += lambda_ik[valid_b, t, :] * matches.float()
+            
+            # Normalize by sequence length
+            seq_lengths = (c_t >= 0).sum(dim=1, keepdim=True).float()
+            identity_scores = identity_scores / (seq_lengths + 1e-8)
+            
+            # Get max identity across batch
+            max_identity = identity_scores.max().item()
         
         return {
             'copy_rate': copy_rate,

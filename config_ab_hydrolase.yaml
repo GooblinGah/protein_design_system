@@ -7,7 +7,7 @@ model:
   n_layers: 14
   d_ff: 3584
   dropout: 0.1
-  max_length: 350
+  max_seq_length: 350
 
 data:
   train_path: "data/processed/train.parquet"
@@ -16,7 +16,7 @@ data:
   
   # AB Hydrolase specific parameters
   min_length: 220
-  max_length: 350
+  max_seq_length: 350
   exemplars_per_sample: 10
   use_exemplars: true
   

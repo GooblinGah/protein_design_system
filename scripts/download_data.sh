@@ -7,13 +7,12 @@ DATA_DIR="data/raw"
 mkdir -p $DATA_DIR
 
 echo "Downloading Swiss-Prot hydrolases..."
-# Example - adjust to actual data source
-wget -O $DATA_DIR/swissprot_hydrolases.fasta \
-    "https://www.uniprot.org/uniprot/?query=family:hydrolase&format=fasta"
+wget -L -O "$DATA_DIR/swissprot_hydrolases.fasta" \
+  "https://rest.uniprot.org/uniprotkb/stream?compressed=false&format=fasta&query=reviewed:true+AND+keyword:Hydrolase"
 
-echo "Downloading Pfam annotations..."
-wget -O $DATA_DIR/pfam_annotations.csv \
-    "https://pfam.xfam.org/family/PF00561/alignment/seed/format?format=csv"
+echo "Downloading Pfam PF00561 seed alignment..."
+wget -L -O "$DATA_DIR/pfam_PF00561_seed.sto" \
+  "https://pfam.xfam.org/family/PF00561/alignment/seed/format?format=stockholm"
 
 echo "Downloading motif patterns from PROSITE..."
 wget -O $DATA_DIR/prosite_motifs.dat \

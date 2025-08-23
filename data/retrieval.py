@@ -94,7 +94,10 @@ class ExemplarRetriever:
     def _compute_embeddings_custom(self, sequences, model):
         """Compute embeddings using custom model"""
         # Implementation for custom encoder
-        pass
+        raise NotImplementedError(
+            "Custom encoder not implemented. Use the default ESM2 model or implement "
+            "this method to handle your custom encoder architecture."
+        )
     
     def retrieve_exemplars(
         self,

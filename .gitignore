@@ -1,0 +1,120 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyTorch
+*.pth
+*.pt
+*.ckpt
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Data files
+data/raw/
+data/processed/
+*.parquet
+*.fasta
+*.csv
+*.json
+*.jsonl
+*.hmm
+*.afa
+*.sto
+
+# Logs
+*.log
+logs/
+runs/
+tensorboard_logs/
+
+# Checkpoints and models
+checkpoints/
+models/saved/
+*.pkl
+*.pickle
+
+# Temporary files
+*.tmp
+*.temp
+temp_*
+tmp_*
+
+# FAISS indices
+*.faiss
+*.index
+
+# HMMER files
+*.hmm
+*.afa
+*.sto
+
+# CD-HIT files
+*.clstr
+
+# Provenance
+ledger.jsonl
+provenance/
+
+# Test outputs
+test_*
+*_test_*
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json

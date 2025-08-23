@@ -7,8 +7,8 @@ class ProteinTokenizer:
     """Tokenizer for protein sequences with special tokens."""
     
     def __init__(self):
-        # Standard amino acid alphabet
-        self.aa_alphabet = "ACDEFGHIKLMNPQRSTVWY"
+        # Standard amino acid alphabet + X for unknown
+        self.aa_alphabet = "ACDEFGHIKLMNPQRSTVWYX"
         
         # Special tokens
         self.special_tokens = ["[BOS]", "[EOS]", "[PAD]"]
@@ -40,12 +40,31 @@ class ProteinTokenizer:
         Returns:
             List of token IDs
         """
-        # Validate sequence
-        if not all(aa in self.aa_alphabet for aa in sequence):
-            raise ValueError(f"Invalid amino acid in sequence: {sequence}")
+        # Normalize sequence and handle unknown amino acids
+        sequence = sequence.upper()
+        
+        # Map non-canonical amino acids to X
+        aa_mapping = {
+            'B': 'D',  # Asx (Asp or Asn) -> Asp
+            'Z': 'E',  # Glx (Glu or Gln) -> Glu  
+            'U': 'C',  # Selenocysteine -> Cys
+            'O': 'K',  # Pyrrolysine -> Lys
+        }
+        
+        # Apply mapping and convert unknowns to X
+        mapped_sequence = []
+        valid_aa = set(self.aa_alphabet)
+        
+        for aa in sequence:
+            if aa in valid_aa:
+                mapped_sequence.append(aa)
+            elif aa in aa_mapping:
+                mapped_sequence.append(aa_mapping[aa])
+            else:
+                mapped_sequence.append('X')  # Unknown amino acid
         
         # Convert to IDs
-        token_ids = [self.token_to_id[aa] for aa in sequence]
+        token_ids = [self.token_to_id[aa] for aa in mapped_sequence]
         
         if add_special_tokens:
             token_ids = [self.bos_id] + token_ids + [self.eos_id]

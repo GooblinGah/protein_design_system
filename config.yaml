@@ -7,6 +7,9 @@ model:
   vocab_size: 23  # 20 AA + BOS/EOS/PAD
   dropout: 0.1
   d_ff: 3584
+  pad_id: 2  # PAD token ID
+  bos_id: 0  # BOS token ID
+  eos_id: 1  # EOS token ID
 
 # Data configuration
 data:
@@ -21,7 +24,7 @@ data:
   
   # Processing parameters
   min_length: 220
-  max_length: 350
+  max_seq_length: 350
   identity_threshold: 0.30
   
   # Exemplar settings

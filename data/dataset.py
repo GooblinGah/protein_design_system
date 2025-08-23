@@ -60,7 +60,7 @@ class ProteinDesignDataset(Dataset):
             exemplars = {
                 'sequences': exemplar_seqs,
                 'distances': distances,
-                'tokens': [self.tokenizer.encode(s) for s in exemplar_seqs]
+                'tokens': [self.tokenizer.encode(s, add_special_tokens=False) for s in exemplar_seqs]
             }
             
             # Get alignments if aligner available
@@ -94,11 +94,18 @@ class ProteinDesignDataset(Dataset):
         padded_sequences = []
         attention_masks = []
         
+        pad_id = self.tokenizer.pad_id
         for item in batch:
             seq = item['seq_tokens']
             pad_len = max_len - len(seq)
-            padded_seq = torch.cat([seq, torch.zeros(pad_len, dtype=torch.long)])
-            mask = torch.cat([torch.ones(len(seq)), torch.zeros(pad_len)])
+            if pad_len > 0:
+                pad = torch.full((pad_len,), pad_id, dtype=torch.long)
+                padded_seq = torch.cat([seq, pad])
+                mask = torch.cat([torch.ones(len(seq), dtype=torch.bool),
+                                  torch.zeros(pad_len, dtype=torch.bool)])
+            else:
+                padded_seq = seq
+                mask = torch.ones(len(seq), dtype=torch.bool)
             
             padded_sequences.append(padded_seq)
             attention_masks.append(mask)
@@ -123,7 +130,9 @@ class ProteinDesignDataset(Dataset):
         max_k = max(len(b['exemplars']['tokens']) for b in batch)
         max_len = max(max(len(t) for t in b['exemplars']['tokens']) for b in batch)
         
-        pad = lambda t: torch.cat([torch.tensor(t), torch.zeros(max_len - len(t), dtype=torch.long)])
+        pad_id = self.tokenizer.pad_id
+        pad = lambda t: torch.cat([torch.tensor(t, dtype=torch.long),
+                                   torch.full((max_len - len(t),), pad_id, dtype=torch.long)])
         
         toks = []
         dists = []
@@ -132,7 +141,7 @@ class ProteinDesignDataset(Dataset):
             toks_k = [pad(t) for t in b['exemplars']['tokens']]
             # pad K dimension
             while len(toks_k) < max_k:
-                toks_k.append(torch.zeros(max_len, dtype=torch.long))
+                toks_k.append(torch.full((max_len,), pad_id, dtype=torch.long))
             toks.append(torch.stack(toks_k))  # [K, L]
             
             dist = b['exemplars']['distances']

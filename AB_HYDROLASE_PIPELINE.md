@@ -3,7 +3,7 @@
 ## Overview
 This document describes the complete, production-ready training pipeline for the Alpha/Beta Hydrolase superfamily protein design model. This pipeline provides a specialized dataset collection, preparation, and training workflow optimized for hydrolase enzymes.
 
-## 🎯 Why Alpha/Beta Hydrolases?
+## Why Alpha/Beta Hydrolases?
 
 ### Perfect Training Target
 - **Well-defined fold**: α/β hydrolase fold is one of the most conserved protein structures
@@ -74,7 +74,7 @@ python train_ab_hydrolase_model.py \
     --output-dir runs/ab_hydrolase_v1
 ```
 
-## 📊 Pipeline Components
+## Pipeline Components
 
 ### 1. Data Collection (`scripts/collect_ab_hydrolase_data.py`)
 
@@ -190,7 +190,7 @@ class ABHydrolaseMotifMonitor:
 - **Quality score**: Overall dataset fitness for training
 - **Warning flags**: Issues requiring attention
 
-## 🔧 Configuration Options
+## Configuration Options
 
 ### Data Collection
 ```python
@@ -222,7 +222,7 @@ training:
     copy_loss: 0.4        # Adjust exemplar copying
 ```
 
-## 📈 Expected Results
+## Expected Results
 
 ### Training Progress
 ```
@@ -363,7 +363,7 @@ class ABHydrolaseTrainingMonitor:
 - **MUSCLE**: https://www.drive5.com/muscle/
 - **CD-HIT**: http://weizhongli-lab.org/cd-hit/
 
-## 🎉 Conclusion
+## Conclusion
 
 The Alpha/Beta Hydrolase training pipeline provides a complete, production-ready solution for training specialized protein design models. With its focus on well-conserved structural motifs, comprehensive data collection, and curriculum-based training, this pipeline should achieve excellent results in generating functional hydrolase enzymes.
 

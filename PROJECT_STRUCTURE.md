@@ -1,6 +1,6 @@
 # Protein Design System - Project Structure
 
-## 🏗️ **Repository Overview**
+## Repository Overview
 
 A complete, production-ready protein design system with end-to-end training pipeline, from online data ingestion to model training with identity constraints.
 
@@ -61,7 +61,7 @@ protein_design_system/
 └── 📄 train_ab_hydrolase_model.py # Training script
 ```
 
-## 🎯 **Core Components**
+## Core Components
 
 ### **1. Data Pipeline**
 - **Online Ingestion**: `scripts/ingest_online.py` fetches from UniProt
@@ -103,7 +103,7 @@ protein_design_system/
 2. **Train**: Use `training/trainer.py` with proper logging
 3. **Monitor**: Check `runs/experiment_1/training_log.jsonl`
 
-## 📊 **File Counts by Module**
+## File Counts by Module
 
 - **Data**: 6 files (dataset, preprocessing, retrieval, alignment, loader)
 - **Models**: 12 files (tokenizer, decoder, heads, controller, provenance)
@@ -117,7 +117,7 @@ protein_design_system/
 
 **Total**: 40+ files organized in logical modules
 
-## 🔧 **Key Integration Points**
+## Key Integration Points
 
 ### **Data Flow:**
 ```
@@ -142,7 +142,7 @@ Training Data → FAISS Index → Nearest Neighbors → Exemplar Tokens → Copy
 
 ## 📋 **Current Status**
 
-### **✅ Complete & Working:**
+### Complete & Working:
 - All critical modules implemented and tested
 - End-to-end training pipeline functional
 - Online data ingestion from UniProt
@@ -161,7 +161,7 @@ Training Data → FAISS Index → Nearest Neighbors → Exemplar Tokens → Copy
 - Multi-GPU training support
 - Model serving infrastructure
 
-## 🎉 **Ready for Production**
+## Ready for Production
 
 This system is **100% production-ready** with:
 - **Zero critical bugs** - all identified issues resolved

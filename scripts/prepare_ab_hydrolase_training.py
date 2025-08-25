@@ -149,9 +149,9 @@ def main():
     )
     
     if use_clustering:
-        logger.info("✅ Leakage-aware splits created using CD-HIT clustering")
+        logger.info("Leakage-aware splits created using CD-HIT clustering")
     else:
-        logger.warning("⚠️ Random splits created (may have sequence leakage)")
+        logger.warning("Random splits created (may have sequence leakage)")
 
 if __name__ == "__main__":
     main()

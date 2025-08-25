@@ -41,7 +41,7 @@ python scripts/build_retrieval_index.py --data data/processed/train.parquet --ou
 python train_ab_hydrolase_model.py --config config_ab_hydrolase.yaml
 ```
 
-## 🎯 What This System Does
+## What This System Does
 
 ### Core Capabilities
 - **Protein Sequence Generation**: Generate novel protein sequences from natural language prompts
@@ -56,7 +56,7 @@ python train_ab_hydrolase_model.py --config config_ab_hydrolase.yaml
 - **Structural Validation**: PDB integration for high-resolution structures
 - **Curriculum Learning**: Progressive introduction of motifs and exemplars
 
-## 📊 Expected Performance
+## Expected Performance
 
 ```python
 expected_performance = {
@@ -73,7 +73,7 @@ expected_performance = {
 }
 ```
 
-## 🏗️ System Architecture
+## System Architecture
 
 ### Data Pipeline
 ```
@@ -92,7 +92,7 @@ Prompt + DSL → FSA Constraints → Pointer Generator → Identity Validation �
 - **`training/`**: Trainer with curriculum learning
 - **`scripts/`**: Data collection, clustering, validation
 
-## 🔧 Configuration
+## Configuration
 
 ### Main Config (`config.yaml`)
 - Model architecture parameters
@@ -137,15 +137,15 @@ protein_design_system/
 └── README.md                     # This file
 ```
 
-## 🧪 Testing & CI
+## Testing & CI
 
 ### Run Tests
 ```bash
 # Test imports
-python -c "from data import ProteinDesignDataset; print('✅ Data modules work')"
+python -c "from data import ProteinDesignDataset; print('Data modules work')"
 
 # Test evaluation
-python -c "from evaluation import ProteinDesignEvaluator; print('✅ Evaluation works')"
+python -c "from evaluation import ProteinDesignEvaluator; print('Evaluation works')"
 
 # Test configuration
 python scripts/validate_config.py --config config_ab_hydrolase.yaml
@@ -194,7 +194,7 @@ ledger.log_generation_decision(
 )
 ```
 
-## 📈 Training Workflow
+## Training Workflow
 
 ### 1. Data Collection
 - UniProt API integration
@@ -216,7 +216,7 @@ ledger.log_generation_decision(
 - Motif accuracy tracking
 - Novelty validation
 
-## 🔍 Monitoring & Debugging
+## Monitoring & Debugging
 
 ### Training Logs
 ```bash
@@ -330,7 +330,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - **HMMER**: Sean Eddy Lab
 - **MUSCLE**: Robert Edgar
 
-## 🎯 Next Steps
+## Next Steps
 
 1. **Run the quickstart** to get familiar with the system
 2. **Customize for your protein family** by modifying the data collection

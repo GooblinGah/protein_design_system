@@ -42,7 +42,7 @@ def main():
     if args.output_dir:
         config['output_dir'] = args.output_dir
     
-    print(f"🎯 Training configuration:")
+                print(f"Training configuration:")
     print(f"   Model: {config.get('model', {}).get('d_model', 'N/A')}d, "
           f"{config.get('model', {}).get('n_layers', 'N/A')} layers")
     print(f"   Data: {config.get('data', {}).get('train_path', 'N/A')}")
@@ -53,7 +53,7 @@ def main():
     trainer = ProteinDesignTrainer(config)
     trainer.fit(resume_ckpt=args.resume)
     
-    print("🎉 Training completed successfully!")
+                print("Training completed successfully!")
 
 
 if __name__ == "__main__":

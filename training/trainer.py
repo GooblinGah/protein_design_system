@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""
-Complete, production-ready trainer for the protein design system.
-
-Features:
-- YAML config loading and merging
-- Dataset + DataLoader wiring (ProteinDesignDataset)
-- Optional FAISS retrieval (ExemplarRetriever)
-- Proper padding handling with tokenizer.pad_id
-- Batch adapter to map dataset schema → model expectations
-- Training loop with optimizer, warmup+cosine LR schedulers
-- Evaluation loop, checkpointing, and resuming
-- Works with decoders returning either 'logits_vocab' (preferred) or 'p_mixture'
-- Comprehensive logging and progress tracking
-
-This trainer is designed to work with your existing:
-- models/tokenizer.py (ProteinTokenizer)
-- models/decoder/pointer_generator.py (PointerGeneratorDecoder)
-- data/dataset.py (ProteinDesignDataset)
-- data/retrieval.py (ExemplarRetriever)
-"""
+"""Production trainer for protein design system."""
 
 import os
 import math
@@ -45,7 +26,6 @@ from models.tokenizer import ProteinTokenizer
 from data import ProteinDesignDataset, ExemplarRetriever
 
 
-# ---------------- Config structures ----------------
 @dataclass
 class TrainerConfig:
     # Data
@@ -92,7 +72,6 @@ class TrainerConfig:
     seed: int = 42
 
 
-# ---------------- Utilities ----------------
 def set_seed(seed: int):
     """Set random seeds for reproducibility."""
     import random
@@ -114,7 +93,6 @@ def ensure_dir(p: Path):
     p.mkdir(parents=True, exist_ok=True)
 
 
-# ---------------- Trainer ----------------
 class ProteinDesignTrainer:
     """Complete trainer for protein design models."""
     
@@ -123,18 +101,18 @@ class ProteinDesignTrainer:
         set_seed(self.cfg.seed)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"🚀 Using device: {self.device}")
+        print(f"Using device: {self.device}")
 
         # --- Tokenizer ---
         self.tokenizer = ProteinTokenizer()
         self.pad_id = self.tokenizer.pad_id
         self.bos_id = self.tokenizer.bos_id
         self.eos_id = self.tokenizer.eos_id
-        print(f"📝 Tokenizer: vocab_size={self.tokenizer.vocab_size}, pad_id={self.pad_id}")
+        print(f"Tokenizer: vocab_size={self.tokenizer.vocab_size}, pad_id={self.pad_id}")
 
         # --- Model ---
         vocab_size = self.cfg.vocab_size or self.tokenizer.vocab_size
-        print(f"🏗️ Building model: d_model={self.cfg.d_model}, n_layers={self.cfg.n_layers}")
+        print(f"Building model: d_model={self.cfg.d_model}, n_layers={self.cfg.n_layers}")
 
         self.model = PointerGeneratorDecoder(
             vocab_size=vocab_size,
@@ -149,7 +127,7 @@ class ProteinDesignTrainer:
         # --- Retrieval ---
         self.retriever = None
         if self.cfg.use_retrieval:
-            print(f"🔍 Loading retrieval index: {self.cfg.retrieval_index_path}")
+            print(f"Loading retrieval index: {self.cfg.retrieval_index_path}")
             self.retriever = ExemplarRetriever(
                 embedding_dim=self.cfg.embedding_dim,
                 model_name=self.cfg.embedding_model,
@@ -157,7 +135,7 @@ class ProteinDesignTrainer:
             self.retriever.load_index(self.cfg.retrieval_index_path)
 
         # --- Data ---
-        print(f"📊 Loading datasets: {self.cfg.train_path}, {self.cfg.val_path}")
+        print(f"Loading datasets: {self.cfg.train_path}, {self.cfg.val_path}")
         self.train_ds = ProteinDesignDataset(
             data_path=self.cfg.train_path,
             tokenizer=self.tokenizer,
@@ -188,8 +166,8 @@ class ProteinDesignTrainer:
             pin_memory=True,
         )
 
-        print(f"📈 Train: {len(self.train_ds)} samples, Val: {len(self.val_ds)} samples")
-        print(f"🔄 Batch size: {self.cfg.batch_size}, Steps per epoch: {len(self.train_loader)}")
+        print(f"Train: {len(self.train_ds)} samples, Val: {len(self.val_ds)} samples")
+        print(f"Batch size: {self.cfg.batch_size}, Steps per epoch: {len(self.train_loader)}")
 
         # --- Optimizer & Scheduler ---
         self.optimizer = AdamW(
@@ -213,26 +191,10 @@ class ProteinDesignTrainer:
         self.global_step = 0
         self.best_val = float("inf")
         
-        print(f"💾 Output directory: {self.out_dir}")
+        print(f"Output directory: {self.out_dir}")
 
-    # ---------- Batch adapter ----------
     def adapt_batch(self, batch: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Map dataset batch → model inputs & training targets.
-        
-        Dataset provides:
-          - sequences: Long [B, T] (with BOS/EOS, padded with PAD)
-          - attention_mask: Bool [B, T]
-          - prompts: list[str]
-          - dsl_specs: list[dict]
-          - exemplars: {"tokens": Long [B,K,L], "distances": Float [B,K]} (optional)
-        
-        We return:
-          - input_ids: Long [B, T] (with BOS/EOS)
-          - target_ids: Long [B, T] (teacher forcing; next-token, last becomes PAD)
-          - attention_mask: Bool [B, T]
-          - exemplars: optional dict passed through
-        """
+        """Map dataset batch to model inputs."""
         x = batch["sequences"].to(self.device)                 # [B,T]
         attn = batch.get("attention_mask")
         if attn is not None:
@@ -262,7 +224,6 @@ class ProteinDesignTrainer:
             "prompts": batch.get("prompts"),
         }
 
-    # ---------- Loss computation ----------
     def compute_loss(self, outputs: Dict[str, torch.Tensor], target_ids: torch.Tensor) -> torch.Tensor:
         """
         Compute loss from model outputs.
@@ -297,7 +258,6 @@ class ProteinDesignTrainer:
         else:
             raise KeyError("Decoder outputs missing 'logits_vocab', 'logits', or 'p_mixture'.")
 
-    # ---------- Training & Evaluation ----------
     def build_scheduler(self, steps_per_epoch: int):
         """Build learning rate scheduler with warmup + cosine annealing."""
         warmup = self.cfg.warmup_steps
@@ -312,7 +272,7 @@ class ProteinDesignTrainer:
         )
         self.scheduler = SequentialLR(self.optimizer, [warm, cos], milestones=[warmup])
         
-        print(f"📉 LR Schedule: {warmup} warmup steps, {main_steps} cosine steps")
+        print(f"LR Schedule: {warmup} warmup steps, {main_steps} cosine steps")
 
     def train_epoch(self, epoch_idx: int):
         """Train for one epoch."""
@@ -399,10 +359,9 @@ class ProteinDesignTrainer:
                 "phase": "validation"
             }) + "\n")
         
-        print(f"📊 Validation Loss: {val_loss:.4f}")
+        print(f"Validation Loss: {val_loss:.4f}")
         return val_loss
 
-    # ---------- Checkpointing ----------
     def save_checkpoint(self, is_best: bool, tag: Optional[str] = None):
         """Save model checkpoint."""
         payload = {
@@ -428,7 +387,7 @@ class ProteinDesignTrainer:
 
         if is_best:
             torch.save(payload, self.ckpt_dir / "best.pt")
-            print(f"🏆 New best model saved: {val_loss:.4f}")
+            print(f"New best model saved: {val_loss:.4f}")
 
         # Prune old checkpoints
         ckpts = sorted(
@@ -444,7 +403,7 @@ class ProteinDesignTrainer:
 
     def load_checkpoint(self, path: str):
         """Load model checkpoint."""
-        print(f"📂 Loading checkpoint: {path}")
+        print(f"Loading checkpoint: {path}")
         payload = torch.load(path, map_location=self.device)
         
         self.model.load_state_dict(payload["model_state"])
@@ -460,15 +419,14 @@ class ProteinDesignTrainer:
             tokenizer_info = payload["tokenizer_info"]
             if (tokenizer_info["vocab_size"] != self.tokenizer.vocab_size or
                 tokenizer_info["pad_id"] != self.tokenizer.pad_id):
-                print(f"⚠️ Warning: Tokenizer mismatch in checkpoint")
+                print(f"Warning: Tokenizer mismatch in checkpoint")
                 print(f"   Checkpoint: vocab_size={tokenizer_info['vocab_size']}, pad_id={tokenizer_info['pad_id']}")
                 print(f"   Current: vocab_size={self.tokenizer.vocab_size}, pad_id={self.tokenizer.pad_id}")
 
-    # ---------- Main training loop ----------
     def fit(self, resume_ckpt: Optional[str] = None):
         """Main training loop."""
-        print(f"🎯 Starting training for {self.cfg.epochs} epochs")
-        print(f"📊 Total steps: {len(self.train_loader) * self.cfg.epochs}")
+        print(f"Starting training for {self.cfg.epochs} epochs")
+        print(f"Total steps: {len(self.train_loader) * self.cfg.epochs}")
         
         if resume_ckpt:
             # Build scheduler after loaders to have correct step counts
@@ -482,7 +440,7 @@ class ProteinDesignTrainer:
         # Training loop
         for epoch in range(self.cfg.epochs):
             print(f"\n{'='*50}")
-            print(f"🚀 Epoch {epoch+1}/{self.cfg.epochs}")
+            print(f"Epoch {epoch+1}/{self.cfg.epochs}")
             print(f"{'='*50}")
             
             train_loss = self.train_epoch(epoch)
@@ -491,18 +449,17 @@ class ProteinDesignTrainer:
             is_best = val_loss < self.best_val
             if is_best:
                 self.best_val = val_loss
-                print(f"🏆 New best validation loss: {val_loss:.4f}")
+                print(f"New best validation loss: {val_loss:.4f}")
             
             self.save_checkpoint(is_best=is_best, tag=f"epoch{epoch+1}")
             
-            print(f"📈 Epoch {epoch+1} complete - Train: {train_loss:.4f}, Val: {val_loss:.4f}")
+            print(f"Epoch {epoch+1} complete - Train: {train_loss:.4f}, Val: {val_loss:.4f}")
 
         # Save final checkpoint
         self.save_checkpoint(is_best=False, tag="final")
-        print(f"\n🎉 Training complete! Best validation loss: {self.best_val:.4f}")
+        print(f"\nTraining complete! Best validation loss: {self.best_val:.4f}")
 
 
-# ---------------- CLI ----------------
 def main():
     """Command-line interface."""
     import argparse
@@ -511,7 +468,7 @@ def main():
     ap.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume")
     args = ap.parse_args()
 
-    print(f"📋 Loading config: {args.config}")
+    print(f"Loading config: {args.config}")
     cfg_file = load_yaml_config(args.config)
 
     # Merge top-level sections commonly used in your repo's config.yaml
@@ -561,7 +518,7 @@ def main():
             "keep_last_n": cfg_file["training"].get("keep_last_n", TrainerConfig.keep_last_n),
         })
 
-    print(f"🔧 Merged config: {merged}")
+    print(f"Merged config: {merged}")
     
     trainer = ProteinDesignTrainer(merged)
     trainer.fit(resume_ckpt=args.resume)

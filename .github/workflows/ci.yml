@@ -28,9 +28,9 @@ jobs:
       - name: Test imports
         run: |
           python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
-          python -c "from data import ProteinDesignDataset, ExemplarRetriever; print('✅ Data modules imported')"
-          python -c "from evaluation import ProteinDesignEvaluator; print('✅ Evaluation modules imported')"
-          python -c "from models.decoding import FSAConstrainedDecoder; print('✅ Decoder modules imported')"
+          python -c "from data import ProteinDesignDataset, ExemplarRetriever; print('Data modules imported')"
+          python -c "from evaluation import ProteinDesignEvaluator; print('Evaluation modules imported')"
+          python -c "from models.decoding import FSAConstrainedDecoder; print('Decoder modules imported')"
       
       - name: Test evaluation metrics
         run: |
@@ -40,7 +40,7 @@ jobs:
           m = ev.evaluate_batch(["MKT"], ["MKT"], [{"length":[1,5],"motifs":[]}], [])
           expected_keys = {"constraint_satisfaction_rate","motif_correctness_mean","identity_mean","liability_score_mean","novelty_rate"}
           assert set(m.keys()) == expected_keys, f"Expected {expected_keys}, got {set(m.keys())}"
-          print("✅ Evaluation metrics test passed")
+          print("Evaluation metrics test passed")
           PY
       
       - name: Test dataset collation
@@ -74,9 +74,9 @@ jobs:
           
           try:
               result = dataset.collate_fn(batch)
-              print("✅ Dataset collation test passed")
+              print("Dataset collation test passed")
           except Exception as e:
-              print(f"❌ Dataset collation test failed: {e}")
+              print(f"Dataset collation test failed: {e}")
               raise
           PY
       
@@ -95,7 +95,7 @@ jobs:
           }
           
           result = validator.validate_sequence("MKTABC", constraints)
-          print(f"✅ Constraint validation test passed: {result}")
+          print(f"Constraint validation test passed: {result}")
           PY
       
       - name: Test configuration validation
@@ -106,14 +106,14 @@ jobs:
         run: |
           python -c "
           from scripts.cluster_splits import SequenceClusterer
-          print('✅ Clustering script imports successfully')
+          print('Clustering script imports successfully')
           "
       
       - name: Test AB Hydrolase collector
         run: |
           python -c "
           from scripts.collect_ab_hydrolase_data import ABHydrolaseCollector
-          print('✅ AB Hydrolase collector imports successfully')
+          print('AB Hydrolase collector imports successfully')
           "
       
       - name: Run unit tests (if they exist)
@@ -140,12 +140,12 @@ jobs:
           for module in modules:
               try:
                   __import__(module)
-                  print(f'✅ {module} imported successfully')
+                  print(f'{module} imported successfully')
               except ImportError as e:
-                  print(f'❌ {module} import failed: {e}')
+                  print(f'{module} import failed: {e}')
                   sys.exit(1)
           
-          print('✅ All critical modules imported successfully')
+          print('All critical modules imported successfully')
           "
       
       - name: Check file structure
@@ -164,24 +164,24 @@ jobs:
           
           for file in required_files:
               if Path(file).exists():
-                  echo "✅ $file exists"
+                  echo "$file exists"
               else:
-                  echo "❌ $file missing"
+                  echo "$file missing"
                   exit 1
           
-          echo "✅ All required files present"
+          echo "All required files present"
       
       - name: Test configuration files
         run: |
           echo "Testing configuration file syntax..."
-          python -c "import yaml; yaml.safe_load(open('config_ab_hydrolase.yaml')); print('✅ AB Hydrolase config is valid YAML')"
-          python -c "import yaml; yaml.safe_load(open('config.yaml')); print('✅ Main config is valid YAML')"
+          python -c "import yaml; yaml.safe_load(open('config_ab_hydrolase.yaml')); print('AB Hydrolase config is valid YAML')"
+          python -c "import yaml; yaml.safe_load(open('config.yaml')); print('Main config is valid YAML')"
       
       - name: Test requirements.txt
         run: |
           echo "Testing requirements.txt..."
           pip check || echo "Warning: Some package conflicts detected"
-          echo "✅ Requirements validation completed"
+          echo "Requirements validation completed"
       
       - name: Test data loading (if data exists)
         run: |
@@ -190,7 +190,7 @@ jobs:
               python -c "
               import pandas as pd
               df = pd.read_parquet('data/processed/train.parquet')
-              print(f'✅ Loaded training data: {len(df)} samples')
+              print(f'Loaded training data: {len(df)} samples')
               "
           else
               echo "No training data found, skipping data loading test"
@@ -205,9 +205,9 @@ jobs:
           try:
               from models.tokenizer import ProteinTokenizer
               tokenizer = ProteinTokenizer()
-              print(f"✅ Tokenizer initialized with vocab size: {tokenizer.vocab_size}")
+              print(f"Tokenizer initialized with vocab size: {tokenizer.vocab_size}")
           except Exception as e:
-              print(f"❌ Tokenizer initialization failed: {e}")
+              print(f"Tokenizer initialization failed: {e}")
               raise
           
           try:
@@ -220,12 +220,12 @@ jobs:
                   d_ff=512,
                   max_seq_length=100
               )
-              print("✅ Pointer generator decoder initialized")
+              print("Pointer generator decoder initialized")
           except Exception as e:
-              print(f"❌ Decoder initialization failed: {e}")
+              print(f"Decoder initialization failed: {e}")
               raise
           
-          print("✅ Model initialization tests passed")
+          print("Model initialization tests passed")
           PY
       
       - name: Test FSA constraint engine
@@ -233,9 +233,9 @@ jobs:
           python - <<'PY'
           try:
               from constraints.fsa import FSAConstraintEngine
-              print("✅ FSA constraint engine imported")
+              print("FSA constraint engine imported")
           except Exception as e:
-              print(f"❌ FSA constraint engine import failed: {e}")
+              print(f"FSA constraint engine import failed: {e}")
               raise
           PY
       
@@ -246,9 +246,9 @@ jobs:
               from models.provenance.ledger import ProvenanceLedger
               config = {'paths': {'ledger_file': 'test_ledger.jsonl'}}
               ledger = ProvenanceLedger(config)
-              print("✅ Provenance ledger initialized")
+              print("Provenance ledger initialized")
           except Exception as e:
-              print(f"❌ Provenance ledger initialization failed: {e}")
+              print(f"Provenance ledger initialization failed: {e}")
               raise
           PY
       
@@ -261,6 +261,6 @@ jobs:
       
       - name: Summary
         run: |
-          echo "🎉 CI pipeline completed successfully!"
+          echo "CI pipeline completed successfully!"
           echo "All critical components are working correctly."
           echo "The protein design system is ready for training."
